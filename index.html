@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Darwinex — Daily Performance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<style>
+  :root{
+    --ink:#10161D;
+    --paper:#171F27;
+    --paper-2:#1E2831;
+    --line:#2B3542;
+    --line-soft:#212B34;
+    --text:#E7ECF1;
+    --text-muted:#8A96A3;
+    --text-faint:#5C6873;
+    --gain:#4FAE7C;
+    --loss:#D9705C;
+    --gold:#C9A15C;
+    --gold-dim:rgba(201,161,92,0.14);
+    --radius:4px;
+    --sans:'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--ink);
+    color:var(--text);
+    font-family:var(--sans);
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  .container{max-width:920px;margin:0 auto;padding:36px 20px 90px;}
+
+  /* ---------- header ---------- */
+  header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px;}
+  .brand{display:flex;flex-direction:column;gap:2px;}
+  .brand .mark{font-size:13px;letter-spacing:0.02em;color:var(--gold);font-weight:600;}
+  .brand h1{margin:0;font-size:20px;font-weight:600;color:var(--text);}
+  .brand .sub{font-size:13px;color:var(--text-muted);}
+  .icon-btn{
+    background:var(--paper);border:1px solid var(--line);color:var(--text-muted);
+    width:36px;height:36px;border-radius:var(--radius);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;transition:border-color .15s, color .15s;
+    flex-shrink:0;
+  }
+  .icon-btn:hover{border-color:var(--gold);color:var(--gold);}
+  .icon-btn svg{width:17px;height:17px;}
+
+  /* ---------- settings panel ---------- */
+  #settingsPanel{
+    display:none;background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);
+    padding:20px;margin-bottom:24px;
+  }
+  #settingsPanel.open{display:block;}
+  #settingsPanel h3{margin:0 0 14px;font-size:14px;font-weight:600;color:var(--text);}
+  .settings-row{display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap;}
+  .settings-row label{font-size:13px;color:var(--text-muted);min-width:150px;}
+  .settings-row input[type=number]{width:100px;}
+  .settings-actions{display:flex;gap:10px;flex-wrap:wrap;border-top:1px solid var(--line-soft);padding-top:16px;}
+
+  input[type=number],input[type=date]{
+    background:var(--paper-2);border:1px solid var(--line);color:var(--text);
+    font-family:var(--mono);font-size:14px;padding:9px 10px;border-radius:var(--radius);
+    outline:none;transition:border-color .15s;
+  }
+  input[type=number]:focus,input[type=date]:focus{border-color:var(--gold);}
+  input::-webkit-calendar-picker-indicator{filter:invert(0.7);cursor:pointer;}
+
+  button{font-family:var(--sans);cursor:pointer;}
+  .btn{
+    background:var(--paper-2);border:1px solid var(--line);color:var(--text);
+    padding:9px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;
+    transition:border-color .15s, color .15s;
+  }
+  .btn:hover{border-color:var(--text-muted);}
+  .btn-primary{background:var(--gold);border-color:var(--gold);color:#1A1206;font-weight:600;}
+  .btn-primary:hover{background:#D6AC66;border-color:#D6AC66;}
+  .btn-danger{color:var(--loss);}
+  .btn-danger:hover{border-color:var(--loss);}
+
+  /* ---------- hero ---------- */
+  .hero{
+    background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);
+    padding:28px 26px;margin-bottom:20px;
+  }
+  .hero-top{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;margin-bottom:22px;}
+  .hero-figure{display:flex;flex-direction:column;gap:6px;}
+  .hero-label{font-size:13px;color:var(--text-muted);}
+  .hero-balance{font-family:var(--mono);font-weight:600;font-size:clamp(38px,6vw,54px);line-height:1;letter-spacing:-0.01em;}
+  .hero-delta{font-family:var(--mono);font-size:14px;}
+  .pill{
+    display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;
+    font-size:12px;font-weight:600;font-family:var(--mono);white-space:nowrap;
+  }
+  .pill-gain{background:rgba(79,174,124,0.12);color:var(--gain);}
+  .pill-loss{background:rgba(217,112,92,0.12);color:var(--loss);}
+  .pill-neutral{background:var(--paper-2);color:var(--text-muted);}
+
+  /* entry form */
+  #entryForm{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;border-top:1px solid var(--line-soft);padding-top:22px;}
+  .field{display:flex;flex-direction:column;gap:6px;}
+  .field label{font-size:12px;color:var(--text-muted);}
+  .field input{min-width:150px;}
+  .field-balance input{min-width:180px;font-size:16px;}
+  .toggle-row{display:flex;align-items:center;gap:8px;margin-top:2px;}
+  .toggle-row input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px;cursor:pointer;}
+  .toggle-row label{font-size:12.5px;color:var(--text-muted);cursor:pointer;}
+  #adjustRow{display:none;}
+  #adjustRow.show{display:flex;}
+  .form-note{width:100%;font-size:12px;color:var(--text-faint);margin-top:2px;}
+  #editingNotice{
+    display:none;align-items:center;gap:10px;background:var(--gold-dim);border:1px solid var(--gold);
+    border-radius:var(--radius);padding:8px 12px;font-size:12.5px;color:var(--gold);margin-bottom:16px;
+  }
+  #editingNotice.show{display:flex;}
+  #editingNotice button{background:none;border:none;color:var(--gold);text-decoration:underline;font-size:12.5px;padding:0;}
+
+  /* ---------- stats ---------- */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-bottom:20px;}
+  .stat{background:var(--paper);padding:18px 18px;}
+  .stat-label{font-size:12px;color:var(--text-muted);margin-bottom:8px;}
+  .stat-value{font-family:var(--mono);font-size:22px;font-weight:600;}
+  .stat-sub{font-size:11px;color:var(--text-faint);margin-top:4px;}
+  .up{color:var(--gain);}
+  .down{color:var(--loss);}
+
+  /* ---------- chart ---------- */
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);padding:22px 22px 14px;margin-bottom:20px;}
+  .card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+  .card-head h2{font-size:14px;font-weight:600;margin:0;color:var(--text);}
+  .card-head .card-sub{font-size:12px;color:var(--text-muted);}
+  #chartWrap{position:relative;}
+  #chartSvg{width:100%;height:auto;display:block;overflow:visible;}
+  #tooltip{
+    position:absolute;pointer-events:none;background:var(--paper-2);border:1px solid var(--gold);
+    border-radius:var(--radius);padding:7px 10px;font-family:var(--mono);font-size:12px;
+    display:none;white-space:nowrap;transform:translate(-50%,-115%);z-index:5;
+  }
+  #tooltip .t-date{color:var(--text-muted);font-size:11px;margin-bottom:2px;}
+  #tooltip .t-bal{color:var(--text);font-weight:600;}
+
+  /* ---------- table ---------- */
+  .table-scroll{overflow-x:auto;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  thead th{
+    text-align:right;font-weight:500;color:var(--text-muted);font-size:11.5px;
+    padding:0 10px 10px;border-bottom:1px solid var(--line);white-space:nowrap;
+  }
+  thead th:first-child,tbody td:first-child{text-align:left;}
+  tbody td{padding:10px 10px;border-bottom:1px solid var(--line-soft);font-family:var(--mono);text-align:right;white-space:nowrap;}
+  tbody tr{transition:background .1s;}
+  tbody tr:hover{background:var(--paper-2);}
+  tbody td:first-child{font-family:var(--sans);}
+  .adj-badge{
+    display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--gold);
+    margin-left:6px;vertical-align:middle;
+  }
+  .row-actions{display:flex;gap:6px;justify-content:flex-end;}
+  .row-actions button{
+    background:none;border:1px solid var(--line);color:var(--text-faint);width:26px;height:26px;
+    border-radius:3px;display:inline-flex;align-items:center;justify-content:center;
+  }
+  .row-actions button:hover{border-color:var(--gold);color:var(--gold);}
+  .row-actions .del:hover{border-color:var(--loss);color:var(--loss);}
+  .row-actions svg{width:13px;height:13px;}
+  .hit{color:var(--gain);}
+  .miss{color:var(--text-faint);}
+  #emptyState{padding:40px 0;text-align:center;color:var(--text-muted);font-size:14px;display:none;}
+
+  footer{text-align:center;font-size:12px;color:var(--text-faint);margin-top:28px;}
+
+  /* ---------- login ---------- */
+  #loginScreen{
+    position:fixed;inset:0;background:var(--ink);display:flex;align-items:center;
+    justify-content:center;padding:20px;z-index:100;
+  }
+  .login-card{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);padding:32px 28px;max-width:340px;width:100%;}
+  .login-card .mark{font-size:13px;letter-spacing:0.02em;color:var(--gold);font-weight:600;}
+  .login-card h1{margin:4px 0 6px;font-size:20px;font-weight:600;}
+  .login-card .sub{font-size:13px;color:var(--text-muted);margin-bottom:22px;}
+  #loginForm .field{margin-bottom:14px;width:100%;}
+  #loginForm input{width:100%;}
+  .login-error{font-size:12.5px;color:var(--loss);min-height:16px;margin-bottom:8px;}
+  #loginBtn{width:100%;justify-content:center;}
+
+  @media (max-width:640px){
+    .hero-top{flex-direction:column;}
+    #entryForm{flex-direction:column;align-items:stretch;}
+    .field input{width:100%;}
+    thead th:nth-child(2),tbody td:nth-child(2){display:none;}
+  }
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="login-card">
+    <span class="mark">Darwinex</span>
+    <h1>Daily performance</h1>
+    <p class="sub">Sign in to view and update your data.</p>
+    <form id="loginForm">
+      <div class="field">
+        <label for="loginEmail">Email</label>
+        <input type="email" id="loginEmail" required autocomplete="username">
+      </div>
+      <div class="field">
+        <label for="loginPassword">Password</label>
+        <input type="password" id="loginPassword" required autocomplete="current-password">
+      </div>
+      <div class="login-error" id="loginError"></div>
+      <button type="submit" class="btn btn-primary" id="loginBtn">Sign in</button>
+    </form>
+  </div>
+</div>
+
+<div class="container" id="appContainer" style="display:none;">
+
+  <header>
+    <div class="brand">
+      <span class="mark">Darwinex</span>
+      <h1>Daily performance</h1>
+      <span class="sub">Enter today's balance — everything else is calculated</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span class="pill pill-neutral" id="syncStatus">Connecting…</span>
+      <button class="icon-btn" id="signOutBtn" title="Sign out" aria-label="Sign out">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+      </button>
+      <button class="icon-btn" id="settingsBtn" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div id="settingsPanel">
+    <h3>Settings</h3>
+    <div class="settings-row">
+      <label for="targetRateInput">Daily target rate (%)</label>
+      <input type="number" id="targetRateInput" step="0.01" min="0">
+      <span class="form-note" style="width:auto;">Used to calculate the Target column and target-hit rate going forward.</span>
+    </div>
+    <div class="settings-actions">
+      <button class="btn" id="resetSeedBtn">Reset to original spreadsheet history</button>
+      <button class="btn btn-danger" id="clearAllBtn">Clear all data</button>
+    </div>
+  </div>
+
+  <div class="hero">
+    <div class="hero-top">
+      <div class="hero-figure">
+        <span class="hero-label" id="balanceLabel">Current balance</span>
+        <span class="hero-balance" id="heroBalance">—</span>
+        <span class="hero-delta" id="heroDelta"></span>
+      </div>
+      <span class="pill pill-neutral" id="targetPill">No data yet</span>
+    </div>
+
+    <div id="editingNotice"><span id="editingText"></span> <button id="cancelEditBtn">cancel edit</button></div>
+
+    <form id="entryForm">
+      <div class="field">
+        <label for="entryDate">Date</label>
+        <input type="date" id="entryDate" required>
+      </div>
+      <div class="field field-balance">
+        <label for="entryFinish">Balance (£)</label>
+        <input type="number" id="entryFinish" step="0.01" placeholder="e.g. 47890.00" required>
+      </div>
+      <div class="field" style="flex:1;min-width:180px;">
+        <div class="toggle-row">
+          <input type="checkbox" id="adjustToggle">
+          <label for="adjustToggle">Deposit or withdrawal happened before today's trading</label>
+        </div>
+        <div class="field" id="adjustRow" style="margin-top:8px;">
+          <label for="entryStartOverride">Starting balance after the deposit/withdrawal (£)</label>
+          <input type="number" id="entryStartOverride" step="0.01">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary" id="saveBtn">Save entry</button>
+    </form>
+  </div>
+
+  <div class="stats" id="statsGrid"></div>
+
+  <div class="card">
+    <div class="card-head">
+      <h2>Balance over time</h2>
+      <span class="card-sub" id="chartRange"></span>
+    </div>
+    <div id="chartWrap">
+      <svg id="chartSvg" viewBox="0 0 800 220" preserveAspectRatio="none"></svg>
+      <div id="tooltip"><div class="t-date" id="ttDate"></div><div class="t-bal" id="ttBal"></div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h2>History</h2>
+      <span class="card-sub" id="historyCount"></span>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th><th>Start</th><th>Target</th><th>Finish</th><th>Daily %</th><th>Daily £</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="historyBody"></tbody>
+      </table>
+      <div id="emptyState">No entries yet — add your first balance above.</div>
+    </div>
+  </div>
+
+  <footer id="footerNote">Loading…</footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ====== PASTE YOUR FIREBASE CONFIG BELOW ======
+  // Firebase Console → Project settings → General → Your apps → SDK setup and configuration
+ var firebaseConfig = {
+  apiKey: "AIzaSyCxXO_1faPS-tsagFP4U_BzB0MGigmq7GA",
+  authDomain: "darwinex-tracker.firebaseapp.com",
+  projectId: "darwinex-tracker",
+  storageBucket: "darwinex-tracker.firebasestorage.app",
+  messagingSenderId: "408350790066",
+  appId: "1:408350790066:web:92672420486131273d4ab"
+};
+  // ================================================
+
+  var DEFAULT_TARGET_RATE = 1.43;
+
+  // ---- seed data, transcribed directly from the user's Darwinex tabs (Jan 5 – Sep 4) ----
+  // [date, start, finish] in GBP. Days where start differs from the prior day's finish
+  // reflect a deposit or withdrawal recorded in the original sheet.
+  var SEED = [
+    ["2026-01-05",4326,4330],["2026-01-06",4330,4350],["2026-01-07",4350,4360],
+    ["2026-01-08",4360,4400],["2026-01-09",4400,4420],["2026-01-12",4420,4440],
+    ["2026-01-13",4440,4450],["2026-01-14",4450,4455],["2026-01-15",4455,4460],
+    ["2026-01-16",4460,4460],["2026-01-19",4460,4467],["2026-01-20",4467,4472],
+    ["2026-01-21",4472,4482],["2026-01-22",4482,4491],["2026-01-23",4491,4491],
+    ["2026-01-26",4491,4538],["2026-01-27",4538,4624],["2026-01-28",4624,4624],
+    ["2026-01-29",4624,4730],["2026-01-30",4730,4802],
+    ["2026-02-02",4802,4805],["2026-02-03",4805,4856],["2026-02-04",4856,4973],
+    ["2026-02-05",4973,5052],["2026-02-06",5052,5155],["2026-02-09",5155,5228],
+    ["2026-02-10",5228,5357],["2026-02-11",5357,5418],["2026-02-12",5418,5481],
+    ["2026-02-13",5481,5512],["2026-02-16",5512,5512],["2026-02-17",5512,5554],
+    ["2026-02-18",5554,5678],["2026-02-19",5678,5813],["2026-02-20",5813,5923],
+    ["2026-02-23",5923,6002],["2026-02-24",6002,6147],["2026-02-25",6147,6223],
+    ["2026-02-26",6223,6310],["2026-02-27",6310,6623],
+    ["2026-03-02",6623,6692],["2026-03-03",6692,6921],["2026-03-04",6921,7046],
+    ["2026-03-05",7046,7401],["2026-03-06",7401,7727],["2026-03-09",7727,8130],
+    ["2026-03-10",8130,8417],["2026-03-11",8417,8922],["2026-03-12",8922,9301],
+    ["2026-03-13",9301,9560],["2026-03-16",9560,9811],["2026-03-17",9811,10070],
+    ["2026-03-18",10070,10143],["2026-03-19",10143,10502],["2026-03-20",10502,10760],
+    ["2026-03-23",10760,15761],["2026-03-24",14211,14513],["2026-03-25",14513,14915],
+    ["2026-03-26",14915,15268],["2026-03-27",15268,15530],
+    ["2026-03-30",15530,15643],["2026-03-31",15643,15944],
+    ["2026-04-01",15944,16270],["2026-04-02",16270,16600],["2026-04-03",16600,16600],
+    ["2026-04-06",16600,16600],["2026-04-07",13000,13635],["2026-04-08",13635,13944],
+    ["2026-04-09",13944,14132],["2026-04-10",14132,14305],["2026-04-13",14305,14657],
+    ["2026-04-14",14657,14905],["2026-04-15",14905,15225],["2026-04-16",15225,15406],
+    ["2026-04-17",15406,15880],["2026-04-20",15880,16252],["2026-04-21",16252,16420],
+    ["2026-04-22",16420,16503],["2026-04-23",16503,16315],["2026-04-24",16315,16415],
+    ["2026-04-27",16415,16406],["2026-04-28",16406,16406],["2026-04-29",16406,16406],
+    ["2026-04-30",16406,16580],
+    ["2026-05-01",16580,16580],["2026-05-04",16580,16580],["2026-05-05",16580,16580],
+    ["2026-05-06",16580,16634],["2026-05-07",16634,16641],["2026-05-08",16641,16645],
+    ["2026-05-11",16645,16951],["2026-05-12",16951,17300],["2026-05-13",17300,17481],
+    ["2026-05-14",17481,17735],["2026-05-15",17735,18025],["2026-05-18",18025,18354],
+    ["2026-05-19",18354,18500],["2026-05-20",18500,18702],["2026-05-21",18702,18975],
+    ["2026-05-22",18975,19303],["2026-05-25",19303,19303],["2026-05-26",19303,19618],
+    ["2026-05-27",19618,19620],["2026-05-28",19620,19820],["2026-05-29",19820,20240],
+    ["2026-06-01",20240,20704],["2026-06-02",20704,21005],["2026-06-03",21005,21332],
+    ["2026-06-04",21332,21710],["2026-06-05",21710,22076],["2026-06-08",22076,22525],
+    ["2026-06-09",22525,23005],["2026-06-10",23005,23601],["2026-06-11",23601,24115],
+    ["2026-06-12",24115,24520],["2026-06-15",24520,24600],["2026-06-16",24600,24956],
+    ["2026-06-17",24956,25174],["2026-06-18",25174,25631],["2026-06-19",25631,26250],
+    ["2026-06-22",26250,26850],["2026-06-23",26850,27301],["2026-06-24",27301,27704],
+    ["2026-06-25",27704,28050],["2026-06-26",28050,29520],["2026-06-29",26000,26374],
+    ["2026-06-30",26374,26775],
+    ["2026-07-01",26775,27310],["2026-07-02",27310,27401],["2026-07-03",27401,27539],
+    ["2026-07-06",27539,27635],["2026-07-07",27635,27753],["2026-07-08",27753,29012],
+    ["2026-07-09",29012,29506],["2026-07-10",29506,30763],["2026-07-13",30763,31271],
+    ["2026-07-14",31271,32238],["2026-07-15",32238,32712],["2026-07-16",32712,33251],
+    ["2026-07-17",33251,33732],["2026-07-20",33732,34457],["2026-07-21",34457,35031],
+    ["2026-07-22",35031,35731],["2026-07-23",35731,36331],["2026-07-24",36331,36926],
+    ["2026-07-27",36926,37488],["2026-07-28",37488,38151],["2026-07-29",38151,38776],
+    ["2026-07-30",38776,39551],["2026-07-31",39551,39906],
+    ["2026-08-03",39351,39455],["2026-08-04",39455,39658],["2026-08-05",39658,39831],
+    ["2026-08-06",39831,39831],["2026-08-07",39831,40022],["2026-08-10",40022,40160],
+    ["2026-08-11",40160,38501],["2026-08-12",38501,37149],["2026-08-13",37149,37201],
+    ["2026-08-14",37201,37324],["2026-08-17",37324,37402],["2026-08-18",37402,37670],
+    ["2026-08-19",37670,37830],["2026-08-20",37830,39023],["2026-08-21",39023,39905],
+    ["2026-08-24",39905,40505],["2026-08-25",40505,41529],["2026-08-26",41529,42050],
+    ["2026-08-27",42050,42780],["2026-08-28",42780,43810],
+    ["2026-08-31",43810,43830],["2026-09-01",43830,45156],["2026-09-02",45156,45845],
+    ["2026-09-03",45845,46709],["2026-09-04",46709,47651]
+  ];
+
+  var entries = [];      // {date, start, finish}
+  var settings = {targetRate: DEFAULT_TARGET_RATE};
+  var editingDate = null;
+  var auth = null;
+  var db = null;
+  var docRef = null;
+  var unsubscribeSnapshot = null;
+  var firstSnapshot = true;
+
+  function setSyncStatus(state){
+    var el = document.getElementById("syncStatus");
+    if(!el) return;
+    el.classList.remove("pill-gain","pill-loss","pill-neutral");
+    if(state === "ok"){ el.classList.add("pill-gain"); el.textContent = "Synced"; }
+    else if(state === "saving"){ el.classList.add("pill-neutral"); el.textContent = "Saving…"; }
+    else if(state === "connecting"){ el.classList.add("pill-neutral"); el.textContent = "Connecting…"; }
+    else { el.classList.add("pill-loss"); el.textContent = "Connection error"; }
+  }
+
+  // ---------- auth (only a signed-in account can read or write the data) ----------
+  function initFirebase(){
+    try{
+      firebase.initializeApp(firebaseConfig);
+      auth = firebase.auth();
+      db = firebase.firestore();
+      docRef = db.collection("darwinex").doc("data");
+      return true;
+    }catch(e){
+      console.error("Firebase init failed — did you paste your config in?", e);
+      setSyncStatus("error");
+      return false;
+    }
+  }
+
+  function handleAuthState(user){
+    if(user){
+      document.getElementById("loginScreen").style.display = "none";
+      document.getElementById("appContainer").style.display = "block";
+      firstSnapshot = true;
+      subscribeToData();
+    }else{
+      if(unsubscribeSnapshot){ unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+      document.getElementById("loginScreen").style.display = "flex";
+      document.getElementById("appContainer").style.display = "none";
+      document.getElementById("loginPassword").value = "";
+      document.getElementById("loginBtn").disabled = false;
+      document.getElementById("loginBtn").textContent = "Sign in";
+    }
+  }
+
+  document.getElementById("loginForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    var email = document.getElementById("loginEmail").value.trim();
+    var password = document.getElementById("loginPassword").value;
+    var errEl = document.getElementById("loginError");
+    var btn = document.getElementById("loginBtn");
+    errEl.textContent = "";
+    btn.disabled = true;
+    btn.textContent = "Signing in…";
+    auth.signInWithEmailAndPassword(email, password).catch(function(err){
+      var msg = "Couldn't sign in — check your email and password.";
+      if(err.code === "auth/invalid-email"){ msg = "That doesn't look like a valid email address."; }
+      else if(err.code === "auth/too-many-requests"){ msg = "Too many attempts — wait a moment and try again."; }
+      errEl.textContent = msg;
+      btn.disabled = false;
+      btn.textContent = "Sign in";
+    });
+  });
+
+  document.getElementById("signOutBtn").addEventListener("click", function(){
+    if(auth) auth.signOut();
+  });
+
+  function seedFromSheet(){
+    entries = SEED.map(function(r){ return {date:r[0], start:r[1], finish:r[2]}; });
+  }
+
+  function persist(){
+    if(!docRef) return;
+    setSyncStatus("saving");
+    docRef.set({entries: entries, settings: settings}).then(function(){
+      setSyncStatus("ok");
+    }).catch(function(e){
+      console.error("Could not save to Firebase", e);
+      setSyncStatus("error");
+    });
+  }
+
+  function subscribeToData(){
+    setSyncStatus("connecting");
+    unsubscribeSnapshot = docRef.onSnapshot(function(snap){
+      if(snap.exists){
+        var data = snap.data() || {};
+        entries = data.entries || [];
+        settings = data.settings || {targetRate: DEFAULT_TARGET_RATE};
+      }else{
+        seedFromSheet();
+        settings = {targetRate: DEFAULT_TARGET_RATE};
+        persist();
+      }
+      setSyncStatus("ok");
+      renderAll();
+      if(firstSnapshot){
+        resetFormDefaults();
+        firstSnapshot = false;
+      }
+    }, function(err){
+      console.error("Firebase sync error — check your Firestore security rules and that you're signed in as the allowed account", err);
+      setSyncStatus("error");
+    });
+  }
+
+  // ---------- helpers ----------
+  function fmtGBP(n){
+    var sign = n < 0 ? "-" : "";
+    return sign + "£" + Math.abs(n).toLocaleString("en-GB",{minimumFractionDigits:2,maximumFractionDigits:2});
+  }
+  function fmtSignedGBP(n){
+    return (n>=0?"+":"-") + "£" + Math.abs(n).toLocaleString("en-GB",{minimumFractionDigits:2,maximumFractionDigits:2});
+  }
+  function fmtPct(n){
+    return (n>=0?"+":"") + n.toFixed(2) + "%";
+  }
+  function fmtDate(d){
+    var dt = new Date(d+"T00:00:00");
+    return dt.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
+  }
+  function fmtDateShort(d){
+    var dt = new Date(d+"T00:00:00");
+    return dt.toLocaleDateString("en-GB",{day:"numeric",month:"short"});
+  }
+  function sortedEntries(){
+    return entries.slice().sort(function(a,b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  }
+  function nextTradingDay(fromISO){
+    var d = fromISO ? new Date(fromISO+"T00:00:00") : new Date();
+    d.setDate(d.getDate()+1);
+    while(d.getDay()===0 || d.getDay()===6){ d.setDate(d.getDate()+1); }
+    return d.toISOString().slice(0,10);
+  }
+  function todayISO(){
+    return new Date().toISOString().slice(0,10);
+  }
+
+  // ---------- compute derived rows ----------
+  function computeRows(){
+    var sorted = sortedEntries();
+    var rate = (parseFloat(settings.targetRate) || 0) / 100;
+    var cumFactor = 1;
+    var prevFinish = null;
+    return sorted.map(function(e, i){
+      var dailyGBP = e.finish - e.start;
+      var dailyPct = e.start !== 0 ? (dailyGBP / e.start) * 100 : 0;
+      var target = e.start * (1 + rate);
+      cumFactor *= (1 + dailyPct/100);
+      var adjusted = (prevFinish !== null) && (Math.abs(e.start - prevFinish) > 0.005);
+      if(i===0) adjusted = false;
+      prevFinish = e.finish;
+      return {
+        date:e.date, start:e.start, finish:e.finish, dailyGBP:dailyGBP, dailyPct:dailyPct,
+        target:target, hit: e.finish >= target, cumPct:(cumFactor-1)*100, adjusted:adjusted
+      };
+    });
+  }
+
+  // ---------- rendering ----------
+  function renderAll(){
+    var rows = computeRows();
+    renderHero(rows);
+    renderStats(rows);
+    renderChart(rows);
+    renderTable(rows);
+    document.getElementById("targetRateInput").value = settings.targetRate;
+    document.getElementById("footerNote").textContent = rows.length
+      ? "Saved automatically · " + rows.length + " entries tracked"
+      : "Saved automatically";
+  }
+
+  function renderHero(rows){
+    var pill = document.getElementById("targetPill");
+    var balEl = document.getElementById("heroBalance");
+    var deltaEl = document.getElementById("heroDelta");
+    if(!rows.length){
+      balEl.textContent = "—";
+      deltaEl.textContent = "";
+      pill.className = "pill pill-neutral";
+      pill.textContent = "No data yet";
+      return;
+    }
+    var last = rows[rows.length-1];
+    balEl.textContent = fmtGBP(last.finish);
+    deltaEl.innerHTML = '<span class="'+(last.dailyGBP>=0?'up':'down')+'">'+fmtSignedGBP(last.dailyGBP)+' · '+fmtPct(last.dailyPct)+'</span> vs previous entry';
+    if(last.hit){
+      pill.className = "pill pill-gain";
+      pill.textContent = "On target (" + fmtGBP(last.target) + ")";
+    }else{
+      pill.className = "pill pill-loss";
+      pill.textContent = "Below target (" + fmtGBP(last.target) + ")";
+    }
+  }
+
+  function renderStats(rows){
+    var grid = document.getElementById("statsGrid");
+    if(!rows.length){ grid.innerHTML = ""; return; }
+    var netGBP = rows.reduce(function(s,r){ return s+r.dailyGBP; }, 0);
+    var wins = rows.filter(function(r){ return r.dailyPct>0; }).length;
+    var hits = rows.filter(function(r){ return r.hit; }).length;
+    var best = rows.reduce(function(a,b){ return b.dailyPct>a.dailyPct?b:a; }, rows[0]);
+    var worst = rows.reduce(function(a,b){ return b.dailyPct<a.dailyPct?b:a; }, rows[0]);
+    var cum = rows[rows.length-1].cumPct;
+
+    var stats = [
+      {label:"Trading return (cumulative)", value:fmtPct(cum), cls:cum>=0?"up":"down"},
+      {label:"Net trading P&L", value:fmtSignedGBP(netGBP), cls:netGBP>=0?"up":"down"},
+      {label:"Win rate", value:wins+" / "+rows.length+" days", sub:(wins/rows.length*100).toFixed(0)+"%"},
+      {label:"Target hit rate", value:hits+" / "+rows.length+" days", sub:(hits/rows.length*100).toFixed(0)+"% at current rate"},
+      {label:"Best day", value:fmtPct(best.dailyPct), sub:fmtDateShort(best.date), cls:"up"},
+      {label:"Worst day", value:fmtPct(worst.dailyPct), sub:fmtDateShort(worst.date), cls:"down"}
+    ];
+    grid.innerHTML = stats.map(function(s){
+      return '<div class="stat"><div class="stat-label">'+s.label+'</div>'+
+        '<div class="stat-value '+(s.cls||"")+'">'+s.value+'</div>'+
+        (s.sub?'<div class="stat-sub">'+s.sub+'</div>':'')+'</div>';
+    }).join("");
+  }
+
+  function renderChart(rows){
+    var svg = document.getElementById("chartSvg");
+    var range = document.getElementById("chartRange");
+    if(rows.length < 2){
+      svg.innerHTML = "";
+      range.textContent = "";
+      return;
+    }
+    range.textContent = fmtDateShort(rows[0].date) + " – " + fmtDateShort(rows[rows.length-1].date);
+
+    var W = 800, H = 220, padL = 54, padR = 12, padT = 14, padB = 24;
+    var innerW = W - padL - padR, innerH = H - padT - padB;
+    var finishes = rows.map(function(r){ return r.finish; });
+    var min = Math.min.apply(null, finishes), max = Math.max.apply(null, finishes);
+    var span = (max-min) || 1;
+    min -= span*0.08; max += span*0.08;
+
+    function xAt(i){ return padL + (rows.length===1 ? 0 : (i/(rows.length-1))*innerW); }
+    function yAt(v){ return padT + innerH - ((v-min)/(max-min))*innerH; }
+
+    var pathD = rows.map(function(r,i){ return (i===0?"M":"L")+xAt(i).toFixed(2)+","+yAt(r.finish).toFixed(2); }).join(" ");
+    var areaD = pathD + " L"+xAt(rows.length-1).toFixed(2)+","+(padT+innerH)+" L"+xAt(0).toFixed(2)+","+(padT+innerH)+" Z";
+
+    var gridLines = "";
+    [min + (max-min)*0.02, min + (max-min)*0.5, max - (max-min)*0.02].forEach(function(v){
+      var y = yAt(v);
+      gridLines += '<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="var(--line-soft)" stroke-width="1"/>';
+      gridLines += '<text x="'+(padL-8)+'" y="'+(y+4).toFixed(1)+'" text-anchor="end" font-family="var(--mono)" font-size="10" fill="var(--text-faint)">£'+Math.round(v).toLocaleString("en-GB")+'</text>';
+    });
+
+    var last = rows.length-1;
+    svg.innerHTML =
+      '<defs><linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">'+
+        '<stop offset="0%" stop-color="var(--gold)" stop-opacity="0.18"/>'+
+        '<stop offset="100%" stop-color="var(--gold)" stop-opacity="0"/>'+
+      '</linearGradient></defs>'+
+      gridLines +
+      '<path d="'+areaD+'" fill="url(#areaFill)" stroke="none"/>'+
+      '<path d="'+pathD+'" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'+
+      '<circle cx="'+xAt(last).toFixed(2)+'" cy="'+yAt(rows[last].finish).toFixed(2)+'" r="4" fill="var(--gold)"/>'+
+      '<rect id="hoverRect" x="'+padL+'" y="0" width="'+innerW+'" height="'+H+'" fill="transparent"/>';
+
+    var hoverRect = svg.querySelector("#hoverRect");
+    var tooltip = document.getElementById("tooltip");
+    var wrap = document.getElementById("chartWrap");
+
+    function handleMove(clientX, clientY){
+      var rect = svg.getBoundingClientRect();
+      var scale = W / rect.width;
+      var xInSvg = (clientX - rect.left) * scale;
+      var idx = Math.round(((xInSvg - padL) / innerW) * (rows.length-1));
+      idx = Math.max(0, Math.min(rows.length-1, idx));
+      var r = rows[idx];
+      var px = (xAt(idx) / W) * rect.width;
+      var py = (yAt(r.finish) / H) * rect.height;
+      tooltip.style.display = "block";
+      tooltip.style.left = px + "px";
+      tooltip.style.top = py + "px";
+      document.getElementById("ttDate").textContent = fmtDate(r.date);
+      document.getElementById("ttBal").textContent = fmtGBP(r.finish);
+    }
+    hoverRect.addEventListener("mousemove", function(ev){ handleMove(ev.clientX, ev.clientY); });
+    hoverRect.addEventListener("mouseleave", function(){ tooltip.style.display = "none"; });
+    hoverRect.addEventListener("touchmove", function(ev){
+      if(ev.touches[0]) handleMove(ev.touches[0].clientX, ev.touches[0].clientY);
+    }, {passive:true});
+    hoverRect.addEventListener("touchend", function(){ tooltip.style.display = "none"; });
+  }
+
+  function renderTable(rows){
+    var body = document.getElementById("historyBody");
+    var empty = document.getElementById("emptyState");
+    var count = document.getElementById("historyCount");
+    if(!rows.length){
+      body.innerHTML = "";
+      empty.style.display = "block";
+      count.textContent = "";
+      return;
+    }
+    empty.style.display = "none";
+    count.textContent = rows.length + " entries";
+    var reversed = rows.slice().reverse();
+    body.innerHTML = reversed.map(function(r){
+      return '<tr>'+
+        '<td>'+fmtDateShort(r.date)+(r.adjusted?'<span class="adj-badge" title="Balance adjusted for a deposit/withdrawal"></span>':'')+'</td>'+
+        '<td>'+fmtGBP(r.start)+'</td>'+
+        '<td>'+fmtGBP(r.target)+'</td>'+
+        '<td>'+fmtGBP(r.finish)+'</td>'+
+        '<td class="'+(r.dailyPct>=0?'up':'down')+'">'+fmtPct(r.dailyPct)+'</td>'+
+        '<td class="'+(r.dailyGBP>=0?'up':'down')+'">'+fmtSignedGBP(r.dailyGBP)+'</td>'+
+        '<td><div class="row-actions">'+
+          '<button class="edit" data-date="'+r.date+'" title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>'+
+          '<button class="del" data-date="'+r.date+'" title="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg></button>'+
+        '</div></td>'+
+      '</tr>';
+    }).join("");
+
+    body.querySelectorAll(".edit").forEach(function(btn){
+      btn.addEventListener("click", function(){ startEdit(btn.getAttribute("data-date")); });
+    });
+    body.querySelectorAll(".del").forEach(function(btn){
+      btn.addEventListener("click", function(){ deleteEntry(btn.getAttribute("data-date")); });
+    });
+  }
+
+  // ---------- form logic ----------
+  function resetFormDefaults(){
+    var sorted = sortedEntries();
+    var lastDate = sorted.length ? sorted[sorted.length-1].date : null;
+    document.getElementById("entryDate").value = lastDate ? nextTradingDay(lastDate) : todayISO();
+    document.getElementById("entryFinish").value = "";
+    document.getElementById("adjustToggle").checked = false;
+    document.getElementById("adjustRow").classList.remove("show");
+    document.getElementById("entryStartOverride").value = "";
+    editingDate = null;
+    document.getElementById("editingNotice").classList.remove("show");
+    document.getElementById("saveBtn").textContent = "Save entry";
+  }
+
+  function startEdit(date){
+    var entry = entries.find(function(e){ return e.date===date; });
+    if(!entry) return;
+    var sorted = sortedEntries();
+    var idx = sorted.findIndex(function(e){ return e.date===date; });
+    var prev = idx>0 ? sorted[idx-1] : null;
+    editingDate = date;
+    document.getElementById("entryDate").value = entry.date;
+    document.getElementById("entryFinish").value = entry.finish;
+    var needsOverride = !prev || Math.abs(entry.start - prev.finish) > 0.005;
+    document.getElementById("adjustToggle").checked = needsOverride;
+    document.getElementById("adjustRow").classList.toggle("show", needsOverride);
+    document.getElementById("entryStartOverride").value = entry.start;
+    document.getElementById("editingNotice").classList.add("show");
+    document.getElementById("editingText").textContent = "Editing " + fmtDate(date);
+    document.getElementById("saveBtn").textContent = "Update entry";
+    document.getElementById("entryFinish").focus();
+  }
+
+  function deleteEntry(date){
+    if(!confirm("Delete the entry for " + fmtDate(date) + "? This can't be undone.")) return;
+    entries = entries.filter(function(e){ return e.date !== date; });
+    persist();
+    renderAll();
+    if(editingDate === date) resetFormDefaults();
+  }
+
+  document.getElementById("adjustToggle").addEventListener("change", function(){
+    var row = document.getElementById("adjustRow");
+    row.classList.toggle("show", this.checked);
+    if(this.checked && !document.getElementById("entryStartOverride").value){
+      var sorted = sortedEntries();
+      var prevFinish = sorted.length ? sorted[sorted.length-1].finish : "";
+      document.getElementById("entryStartOverride").value = prevFinish;
+    }
+  });
+
+  document.getElementById("cancelEditBtn").addEventListener("click", function(e){
+    e.preventDefault();
+    resetFormDefaults();
+  });
+
+  document.getElementById("entryForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    var date = document.getElementById("entryDate").value;
+    var finish = parseFloat(document.getElementById("entryFinish").value);
+    if(!date || isNaN(finish)){ return; }
+
+    var adjust = document.getElementById("adjustToggle").checked;
+    var start;
+    if(adjust){
+      var override = parseFloat(document.getElementById("entryStartOverride").value);
+      start = isNaN(override) ? finish : override;
+    }else{
+      var priorEntries = sortedEntries().filter(function(en){ return en.date < date && en.date !== editingDate; });
+      start = priorEntries.length ? priorEntries[priorEntries.length-1].finish : finish;
+    }
+
+    var existingIdx = entries.findIndex(function(en){ return en.date === date; });
+    if(editingDate && editingDate !== date){
+      entries = entries.filter(function(en){ return en.date !== editingDate; });
+    }
+    existingIdx = entries.findIndex(function(en){ return en.date === date; });
+    if(existingIdx >= 0){
+      entries[existingIdx] = {date:date, start:start, finish:finish};
+    }else{
+      entries.push({date:date, start:start, finish:finish});
+    }
+
+    persist();
+    renderAll();
+    resetFormDefaults();
+  });
+
+  // ---------- settings ----------
+  document.getElementById("settingsBtn").addEventListener("click", function(){
+    document.getElementById("settingsPanel").classList.toggle("open");
+  });
+  document.getElementById("targetRateInput").addEventListener("change", function(){
+    var v = parseFloat(this.value);
+    settings.targetRate = isNaN(v) ? DEFAULT_TARGET_RATE : v;
+    persist();
+    renderAll();
+  });
+  document.getElementById("resetSeedBtn").addEventListener("click", function(){
+    if(!confirm("Reset all data back to the original spreadsheet history (Jan 5 – Sep 4)? Any entries you've added or edited will be lost.")) return;
+    seedFromSheet();
+    persist();
+    renderAll();
+    resetFormDefaults();
+  });
+  document.getElementById("clearAllBtn").addEventListener("click", function(){
+    if(!confirm("Clear every entry, including the original spreadsheet history? This can't be undone.")) return;
+    entries = [];
+    persist();
+    renderAll();
+    resetFormDefaults();
+  });
+
+  // ---------- init ----------
+  function init(){
+    if(!initFirebase()) return;
+    auth.onAuthStateChanged(handleAuthState);
+  }
+  init();
+})();
+</script>
+</body>
+</html>
